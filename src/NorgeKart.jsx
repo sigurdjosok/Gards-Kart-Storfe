@@ -310,7 +310,11 @@ export default function NorgeKart() {
       </div>
 
       <div className="lg:col-span-2 rounded-2xl shadow-sm border overflow-hidden">
-        <MapContainer center={NORWAY_CENTER} zoom={4} className="h-[750px] w-full">
+        <MapContainer
+  center={NORWAY_CENTER}
+  zoom={4}
+  style={{ height: "750px", width: "100%" }}
+>
           <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           {markers.map((it, idx) => (
             <Marker key={`${it.name}-${idx}`} position={[it.lat, it.lon]} icon={ICONS[it.category] || ICONS.storfe}>
