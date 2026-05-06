@@ -185,7 +185,10 @@ export default function NorgeKart() {
 
   const [customItems, setCustomItems] = useState([]);
   useEffect(() => {
-  fetch(`/datasett.csv?v=${Date.now()}`)
+  fetch(`/datasett.csv?v=${Date.now()}`, {
+  cache: "no-store"
+})
+``
     .then(res => res.text())
     .then(text => {
       const items = parseCSV(text);
