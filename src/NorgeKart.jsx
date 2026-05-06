@@ -181,6 +181,14 @@ export default function NorgeKart() {
   const [csvText, setCsvText] = useState("name,category,status,address,lat,lon,note\nEksempel gård,storfe,drift,,63.43,10.39,Trondheim\nEksempel gård 2,svin,ukjent,Gate 1, 0001 Oslo,,,");
 
   const [customItems, setCustomItems] = useState([]);
+  useEffect(() => {
+  fetch("/datasett.csv")
+    .then(res => res.text())
+    .then(text => {
+      const items = parseCSV(text);
+      setCustomItems(items);
+    });
+}, []);
 
   const allItems = useMemo(() => {
     return [
