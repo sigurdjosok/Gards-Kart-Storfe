@@ -87,9 +87,9 @@ function parseCSV(text) {
   name: cols[0],
   category: "svin",
   status: "drift",
-  address: cols.join(" "),
-  lat: undefined,
-  lon: undefined,
+  address: "Oslo",
+  lat: 59.91,
+  lon: 10.75,
   note: "",
 };
 ``
