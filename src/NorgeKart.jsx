@@ -55,11 +55,8 @@ const TINE_SITES = [
 
 // Startdatasett, du kan legge inn flere via CSV
 const START_FARMS = [
-  // Eksempler fra tidligere, med koordinater
-  { name: "Skolås Gard", category: "storfe", status: "drift", lat: 59.39, lon: 8.02, note: "Vinje" },
-  { name: "Nigard Bratterud", category: "storfe", status: "ukjent", lat: 59.51456, lon: 7.99531, note: "Tokke" },
-  { name: "Uppistog Bratterud", category: "storfe", status: "ukjent", lat: 59.5156, lon: 7.9972, note: "Tokke" },
-  { name: "Sypriansen småbruk", category: "begge", status: "drift", lat: 59.307, lon: 9.11, note: "Midt Telemark" },
+  { name: "TEST 1", category: "svin", status: "drift", lat: 59.91, lon: 10.75 },
+  { name: "TEST 2", category: "svin", status: "drift", lat: 60.39, lon: 5.32 },
 ];
 
 function normalize(s) {
