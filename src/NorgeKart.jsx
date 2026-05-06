@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -23,8 +22,6 @@ const ICONS = {
   tine: emojiIcon("🥛", "#bfdbfe"),
 };
 
-// TINE anlegg, hentet fra intern fil, adresser, kategorier
-// Kilde, <File>TINE oversikt anlegg og kontaktpersoner.xlsx</File>
 const TINE_SITES = [
   { name: "TINE Meieriet Alta", category: "tine", status: "drift", address: "Meieriveien 5, 9510 Alta" },
   { name: "TINE Meieriet Bergen", category: "tine", status: "drift", address: "Espehaugen 18, 5258 Blomsterdalen" },
@@ -53,60 +50,72 @@ const TINE_SITES = [
   { name: "TINE Meieriet Ålesund", category: "tine", status: "drift", address: "Klaus Nilsens gate 14, 6003 Ålesund" },
 ];
 
-// Startdatasett, du kan legge inn flere via CSV
-const START_FARMS = [
-  { name: "TEST 1", category: "svin", status: "drift", lat: 59.91, lon: 10.75 },
-  { name: "TEST 2", category: "svin", status: "drift", lat: 60.39, lon: 5.32 },
-];
-
 function normalize(s) {
   return (s || "").toString().trim();
 }
 
 function parseCSV(text) {
-  // Forventet kolonner, name,category,status,address,lat,lon,note
-  // Separator, komma eller semikolon
   const lines = text
     .split(/\r?\n/)
     .map(l => l.trim())
     .filter(Boolean);
+
   if (!lines.length) return [];
 
-  const sep = ";";
-  const header = lines[0].split(sep).map(h => h.trim().toLowerCase());
-  console.log("HEADER:", header);
+  const first = lines[0].replace(/^\uFEFF/, "");
+  const sep = first.includes(";") ? ";" : ",";
+
+  const header = first
+    .split(sep)
+    .map(h => h.trim().toLowerCase());
+
   const idx = (k) => header.indexOf(k);
 
   const out = [];
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(sep).map(c => c.trim());
 
-if (i < 5) { // bare for de første radene så du ikke spammer
-  console.log("HEADER:", header);
-  console.log("RAW LINE:", lines[i]);
-  console.log("COLS:", cols);
-}
-    const item = {
-  name: cols[1] || cols[0],
-  category: "svin",
-  status: "drift",
-  address: cols[2] || "",
-  lat: undefined,
-  lon: undefined,
-  note: "",
-};
-    if (!item.name) continue;
-    if (!ICONS[item.category]) item.category = "storfe";
-    if (!["drift", "ukjent"].includes(item.status)) item.status = "ukjent";
-    console.log("SAMPLE ROW:", item);
-    out.push(item);
+    const name =
+      (idx("name") >= 0 ? cols[idx("name")] : "") ||
+      (cols.length >= 2 ? cols[1] : "") ||
+      cols[0] ||
+      "";
+
+    const address =
+      (idx("address") >= 0 ? cols[idx("address")] : "") ||
+      (cols.length >= 3 ? cols[2] : "") ||
+      "";
+
+    const categoryRaw =
+      (idx("category") >= 0 ? cols[idx("category")] : "") || "";
+
+    const statusRaw =
+      (idx("status") >= 0 ? cols[idx("status")] : "") || "";
+
+    const category = (categoryRaw || "storfe").toLowerCase();
+    const status = (statusRaw || "ukjent").toLowerCase();
+
+    if (!name || !address) continue;
+
+    out.push({
+      name,
+      category: ICONS[category] ? category : "storfe",
+      status: status === "drift" ? "drift" : "ukjent",
+      address,
+      lat: undefined,
+      lon: undefined,
+      note: (idx("note") >= 0 ? cols[idx("note")] : "") || "",
+    });
   }
+
   return out;
 }
 
 async function geocodeNominatim(address) {
   const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
-  const res = await fetch(url, { headers: { "Accept": "application/json" } });
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+  });
   if (!res.ok) return null;
   const json = await res.json();
   if (!json?.length) return null;
@@ -114,7 +123,7 @@ async function geocodeNominatim(address) {
 }
 
 function useGeocode(items) {
-  const [resolved, setResolved] = useState(() => items);
+  const [resolved, setResolved] = useState(items);
   const queueRef = useRef([]);
   const busyRef = useRef(0);
 
@@ -126,15 +135,14 @@ function useGeocode(items) {
     const key = "farmmap_geocode_cache_v1";
     const cache = JSON.parse(localStorage.getItem(key) || "{}");
 
-    const need = resolved
+    const need = items
       .map((it, idx) => ({ it, idx }))
-      .filter(({ it }) => !it.lat && !it.lon && it.address);
+      .filter(({ it }) => !(typeof it.lat === "number" && typeof it.lon === "number") && it.address);
 
     queueRef.current = need;
 
     const pump = async () => {
-      if (busyRef.current >= 8) return;
-``
+      if (busyRef.current >= 2) return; // holdes lavt for stabilitet
       const next = queueRef.current.shift();
       if (!next) return;
 
@@ -168,14 +176,13 @@ function useGeocode(items) {
         // ignorer
       } finally {
         busyRef.current--;
-        setTimeout(pump, 50);
+        setTimeout(pump, 250);
       }
     };
 
-    // start noen arbeidere
     pump();
     pump();
-  }, [resolved]);
+  }, [items]);
 
   return resolved;
 }
@@ -184,30 +191,38 @@ export default function NorgeKart() {
   const [showCategories, setShowCategories] = useState({ storfe: true, svin: true, begge: true, tine: true });
   const [showStatus, setShowStatus] = useState({ drift: true, ukjent: true });
   const [search, setSearch] = useState("");
-  const [csvText, setCsvText] = useState("name,category,status,address,lat,lon,note\nEksempel gård,storfe,drift,,63.43,10.39,Trondheim\nEksempel gård 2,svin,ukjent,Gate 1, 0001 Oslo,,,");
+
+  const [csvText, setCsvText] = useState(
+    "name,category,status,address,lat,lon,note\nEksempel gård,storfe,drift,,63.43,10.39,Trondheim"
+  );
 
   const [customItems, setCustomItems] = useState([]);
-useEffect(() => {
-  fetch(`${window.location.origin}/datasett.csv?v=${Date.now()}`)
-    .then(res => res.text())
-    .then(text => {
-      const items = parseCSV(text);
-      console.log("AUTO LOAD:", items.length);
-      setCustomItems(items);
-    })
-    .catch(err => console.error(err));
-}, []);
-``
+  const [loadInfo, setLoadInfo] = useState("");
 
-const allItems = useMemo(() => {
-  console.log("CUSTOM ITEMS:", customItems.length);
+  // Auto load fra public/datasett.csv
+  useEffect(() => {
+    const url = `${window.location.origin}/datasett.csv?v=${Date.now()}`;
+    fetch(url)
+      .then(res => {
+        if (!res.ok) throw new Error(`Kunne ikke hente datasett.csv, status ${res.status}`);
+        return res.text();
+      })
+      .then(text => {
+        const items = parseCSV(text);
+        setCustomItems(items);
+        setLoadInfo(`Lastet ${items.length} rader fra datasett.csv`);
+      })
+      .catch(err => {
+        setLoadInfo(`Feil ved lasting av datasett.csv, ${err.message}`);
+      });
+  }, []);
 
-  return [
-    ...TINE_SITES.map(x => ({ ...x })),
-    ...START_FARMS.map(x => ({ ...x })),
-    ...customItems.map(x => ({ ...x })),
-  ];
-}, [customItems]);
+  const allItems = useMemo(() => {
+    return [
+      ...TINE_SITES.map(x => ({ ...x })),
+      ...customItems.map(x => ({ ...x })),
+    ];
+  }, [customItems]);
 
   const resolved = useGeocode(allItems);
 
@@ -236,6 +251,7 @@ const allItems = useMemo(() => {
   const importCSV = () => {
     const items = parseCSV(csvText);
     setCustomItems(items);
+    setLoadInfo(`Lastet ${items.length} rader fra tekstfelt`);
   };
 
   const exportCSV = () => {
@@ -265,6 +281,10 @@ const allItems = useMemo(() => {
       <div className="lg:col-span-1 rounded-2xl shadow-sm border bg-white p-3 overflow-auto">
         <div className="text-xl font-semibold">Norgekart, storfe, svin, TINE</div>
         <div className="text-sm text-slate-600 mt-1">Filtrer lag, søk, lim inn CSV, TINE punkter geokodes fra adresse</div>
+
+        {loadInfo && (
+          <div className="mt-2 text-xs text-slate-700">{loadInfo}</div>
+        )}
 
         <div className="mt-4">
           <div className="text-sm font-semibold mb-2">Søk</div>
@@ -308,7 +328,7 @@ const allItems = useMemo(() => {
               <button onClick={exportCSV} className="px-3 py-1 rounded-xl bg-slate-200 text-sm">Eksporter</button>
             </div>
           </div>
-          <div className="text-xs text-slate-600 mt-1">Kolonner, name, category(storfe|svin|begge|tine), status(drift|ukjent), address, lat, lon, note</div>
+          <div className="text-xs text-slate-600 mt-1">Kolonner, id,name,address eller name,address, også mulig name,category,status,address</div>
           <textarea value={csvText} onChange={e => setCsvText(e.target.value)} className="w-full h-36 mt-2 rounded-xl border p-2 font-mono text-xs" />
         </div>
 
@@ -319,28 +339,19 @@ const allItems = useMemo(() => {
             <div className="text-xs text-amber-700 mt-1">Jobber med geokoding, {missingGeo.length} adresser uten koordinater ennå</div>
           )}
         </div>
-
-        <div className="mt-4">
-          <div className="text-sm font-semibold">Tips</div>
-          <div className="text-sm text-slate-700">
-            For Norge, komplett liste over alle gårder med dyreslag er normalt ikke tilgjengelig som åpent kartdatasett, bruk CSV import for dine lister, eller legg inn mottakere du jobber med.
-          </div>
-        </div>
       </div>
 
       <div className="lg:col-span-2 rounded-2xl shadow-sm border overflow-hidden">
-        <MapContainer
-  center={NORWAY_CENTER}
-  zoom={4}
-  style={{ height: "750px", width: "100%" }}
->
-          <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <MapContainer center={NORWAY_CENTER} zoom={4} style={{ height: "750px", width: "100%" }}>
+          <TileLayer attribution="© OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           {markers.map((it, idx) => (
             <Marker key={`${it.name}-${idx}`} position={[it.lat, it.lon]} icon={ICONS[it.category] || ICONS.storfe}>
               <Popup>
                 <div className="text-sm">
                   <div className="font-semibold">{it.name}</div>
-                  <div className="mt-1">{it.category === "tine" ? "🥛 TINE" : it.category === "begge" ? "🐄🐖 Storfe og svin" : it.category === "svin" ? "🐖 Svin" : "🐄 Storfe"}</div>
+                  <div className="mt-1">
+                    {it.category === "tine" ? "🥛 TINE" : it.category === "begge" ? "🐄🐖 Storfe og svin" : it.category === "svin" ? "🐖 Svin" : "🐄 Storfe"}
+                  </div>
                   <div className="mt-1">Status, {it.status === "drift" ? "i drift" : "ukjent"}</div>
                   {it.address && <div className="mt-1">Adresse, {it.address}</div>}
                   {it.note && <div className="mt-1">Notat, {it.note}</div>}
