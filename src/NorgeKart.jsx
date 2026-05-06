@@ -209,13 +209,14 @@ useEffect(() => {
     });
 }, []);
 
- const allItems = useMemo(() => {
-  return customItems.length > 0
-    ? customItems
-    : [
-        ...TINE_SITES.map(x => ({ ...x })),
-        ...START_FARMS.map(x => ({ ...x })),
-      ];
+const allItems = useMemo(() => {
+  console.log("CUSTOM ITEMS:", customItems.length);
+
+  return [
+    ...TINE_SITES.map(x => ({ ...x })),
+    ...START_FARMS.map(x => ({ ...x })),
+    ...customItems.map(x => ({ ...x })),
+  ];
 }, [customItems]);
 
   const resolved = useGeocode(allItems);
