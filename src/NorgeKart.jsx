@@ -87,9 +87,7 @@ function parseCSV(text) {
       name: cols[idx("name")] ?? cols[0],
       category: (cols[idx("category")] ?? "").toLowerCase() || "storfe",
       status: (cols[idx("status")] ?? "").toLowerCase() || "ukjent",
-     address:
-  cols[idx("address")] ||
-  ((cols[idx("postnummer")] || "") + " " + (cols[idx("poststed")] || "")).trim(),
+      address: cols.join(" "),
       lat: cols[idx("lat")] ? Number(cols[idx("lat")]) : undefined,
       lon: cols[idx("lon")] ? Number(cols[idx("lon")]) : undefined,
       note: cols[idx("note")] || "",
