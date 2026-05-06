@@ -80,7 +80,6 @@ function parseCSV(text) {
   const out = [];
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(sep).map(c => c.trim());
-    const cols = lines[i].split(sep).map(c => c.trim());
 
 if (i < 5) { // bare for de første radene så du ikke spammer
   console.log("HEADER:", header);
