@@ -188,22 +188,8 @@ useEffect(() => {
       const items = parseCSV(text);
       console.log("AUTO LOAD:", items.length);
       setCustomItems(items);
-    });
-}, []);
-    .then(res => res.text())
-    .then(text => {
-      const items = parseCSV(text);
-      const importCSV = () => {
-  fetch("/datasett.csv?v=5")
-    .then(res => res.text())
-    .then(text => {
-      const items = parseCSV(text);
-      console.log("CSV loaded:", items.length);
-      setCustomItems(items);
     })
     .catch(err => console.error(err));
-};
-    });
 }, []);
 
 const allItems = useMemo(() => {
