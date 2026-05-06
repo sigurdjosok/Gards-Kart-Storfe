@@ -72,7 +72,7 @@ function parseCSV(text) {
     .filter(Boolean);
   if (!lines.length) return [];
 
-  const sep = lines[0].includes(";") && !lines[0].includes(",") ? ";" : ",";
+  const sep = ";";
   const header = lines[0].split(sep).map(h => h.trim().toLowerCase());
   console.log("HEADER:", header);
   const idx = (k) => header.indexOf(k);
