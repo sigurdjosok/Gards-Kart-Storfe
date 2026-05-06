@@ -184,11 +184,15 @@ export default function NorgeKart() {
   const [csvText, setCsvText] = useState("name,category,status,address,lat,lon,note\nEksempel gård,storfe,drift,,63.43,10.39,Trondheim\nEksempel gård 2,svin,ukjent,Gate 1, 0001 Oslo,,,");
 
   const [customItems, setCustomItems] = useState([]);
-  useEffect(() => {
-  fetch(`/datasett.csv?v=${Date.now()}`, {
-  cache: "no-store"
-})
-``
+useEffect(() => {
+  fetch(`/datasett.csv?v=${Date.now()}`)
+    .then(res => res.text())
+    .then(text => {
+      const items = parseCSV(text);
+      console.log("AUTO LOAD:", items.length);
+      setCustomItems(items);
+    });
+}, []);
     .then(res => res.text())
     .then(text => {
       const items = parseCSV(text);
@@ -205,13 +209,14 @@ export default function NorgeKart() {
     });
 }, []);
 
-  const allItems = useMemo(() => {
-    return [
-      ...TINE_SITES.map(x => ({ ...x })),
-      ...START_FARMS.map(x => ({ ...x })),
-      ...customItems.map(x => ({ ...x })),
-    ];
-  }, [customItems]);
+ const allItems = useMemo(() => {
+  return customItems.length > 0
+    ? customItems
+    : [
+        ...TINE_SITES.map(x => ({ ...x })),
+        ...START_FARMS.map(x => ({ ...x })),
+      ];
+}, [customItems]);
 
   const resolved = useGeocode(allItems);
 
