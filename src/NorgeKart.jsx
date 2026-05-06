@@ -81,15 +81,14 @@ function parseCSV(text) {
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(sep).map(c => c.trim());
     const item = {
-  name: cols[0],
+  name: cols[1] || cols[0],
   category: "svin",
   status: "drift",
-  address: "Oslo",
-  lat: 59.91,
-  lon: 10.75,
+  address: cols[2] || "",
+  lat: undefined,
+  lon: undefined,
   note: "",
 };
-``
     if (!item.name) continue;
     if (!ICONS[item.category]) item.category = "storfe";
     if (!["drift", "ukjent"].includes(item.status)) item.status = "ukjent";
