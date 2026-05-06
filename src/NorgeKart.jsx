@@ -168,7 +168,7 @@ function useGeocode(items) {
         // ignorer
       } finally {
         busyRef.current--;
-        setTimeout(pump, 250);
+        setTimeout(pump, 50);
       }
     };
 
