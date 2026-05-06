@@ -77,6 +77,7 @@ function parseCSV(text) {
 
   const sep = lines[0].includes(";") && !lines[0].includes(",") ? ";" : ",";
   const header = lines[0].split(sep).map(h => h.trim().toLowerCase());
+  console.log("HEADER:", header);
   const idx = (k) => header.indexOf(k);
 
   const out = [];
@@ -96,6 +97,7 @@ function parseCSV(text) {
     if (!item.name) continue;
     if (!ICONS[item.category]) item.category = "storfe";
     if (!["drift", "ukjent"].includes(item.status)) item.status = "ukjent";
+    console.log("SAMPLE ROW:", item);
     out.push(item);
   }
   return out;
