@@ -133,7 +133,8 @@ function useGeocode(items) {
     queueRef.current = need;
 
     const pump = async () => {
-      if (busyRef.current >= 2) return;
+      if (busyRef.current >= 8) return;
+``
       const next = queueRef.current.shift();
       if (!next) return;
 
