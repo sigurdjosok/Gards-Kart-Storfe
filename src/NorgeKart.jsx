@@ -42,12 +42,13 @@ function parseCSV(text, defaults = { category: "storfe", status: "ukjent" }) {
 
   const get = (cols, key, fallbackIndex = -1) => {
     const i = idx(key);
-    if (i >= 0) return cols[i] ?? "";
-    if (fallbackIndex >= 0) return cols[fallbackIndex] ?? "";
+    if (i >= 0) return cols[i] || "";
+    if (fallbackIndex >= 0) return cols[fallbackIndex] || "";
     return "";
   };
 
   const out = [];
+
   for (let r = 1; r < lines.length; r++) {
     const cols = lines[r].split(sep).map(c => c.trim());
 
@@ -86,7 +87,10 @@ async function geocodeNominatim(address) {
   const json = await res.json();
   if (!json.length) return null;
 
-  return { lat: Number(json[0].lat), lon: Number(json[0].lon) };
+  return {
+    lat: Number(json[0].lat),
+    lon: Number(json[0].lon),
+  };
 }
 
 function useGeocode(items) {
@@ -137,6 +141,7 @@ export default function NorgeKart() {
   return (
     <div>
       <h2>{isSvin ? "🐖 Svinebønder" : "🗺️ Norgekart"}</h2>
+
       <div>
         <a href="/">Alle</a> | <a href="/?view=svin">Svin</a>
       </div>
