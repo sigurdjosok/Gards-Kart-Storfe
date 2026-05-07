@@ -91,16 +91,12 @@ function parseCSV(text, defaults = { category: "storfe", status: "ukjent" }) {
 
     if (!name || !address) continue;
 
-    const categoryRaw =
-      (get(cols, "category") || defaults.category || "storfe").toString().toLowerCase();
-
-    const statusRaw =
-      (get(cols, "status") || defaults.status || "ukjent").toString().toLowerCase();
-
-    const category = ICONS[categoryRaw] ? categoryRaw : defaults.category || "storfe";
-    const status = statusRaw === "drift" ? "drift" : "ukjent";
-
+    const categoryRaw = (get(cols, "category") || defaults.category || "storfe").toString().toLowerCase();
+    const statusRaw = (get(cols, "status") || defaults.status || "ukjent").toString().toLowerCase();
     const note = get(cols, "note") || "";
+
+    const category = ICONS[categoryRaw] ? categoryRaw : (defaults.category || "storfe");
+    const status = statusRaw === "drift" ? "drift" : "ukjent";
 
     out.push({
       name,
@@ -146,6 +142,7 @@ function useGeocode(items) {
 
     const pump = async () => {
       if (busyRef.current >= 2) return;
+
       const next = queueRef.current.shift();
       if (!next) return;
 
@@ -175,7 +172,6 @@ function useGeocode(items) {
             return copy;
           });
         }
-      } catch (e) {
       } finally {
         busyRef.current--;
         setTimeout(pump, 250);
@@ -190,18 +186,17 @@ function useGeocode(items) {
 }
 
 export default function NorgeKart() {
-  const params = useMemo(() => new URLSearchParams(window.location.search), []);
-  const isSvinView = params.get("view") === "svin";
+  const isSvinView = useMemo(() => {
+    const p = new URLSearchParams(window.location.search);
+    return p.get("view") === "svin";
+  }, []);
+
   const file = isSvinView ? "svin.csv" : "datasett.csv";
 
   const [showCategories, setShowCategories] = useState({ storfe: true, svin: true, begge: true, tine: true });
   const [showStatus, setShowStatus] = useState({ drift: true, ukjent: true });
   const [search, setSearch] = useState("");
-
-  const [csvText, setCsvText] = useState(
-    "orgnr,name,address\n812870572,JÆRGRIS AS,\"Teglevegen 123, 4355 KVERNALAND\""
-  );
-
+  const [csvText, setCsvText] = useState("orgnr,name,address\n812870572,JÆRGRIS AS,\"Teglevegen 123, 4355 KVERNALAND\"");
   const [customItems, setCustomItems] = useState([]);
   const [loadInfo, setLoadInfo] = useState("");
 
@@ -213,7 +208,10 @@ export default function NorgeKart() {
         return res.text();
       })
       .then(text => {
-        const defaults = isSvinView ? { category: "svin", status: "drift" } : { category: "storfe", status: "ukjent" };
+        const defaults = isSvinView
+          ? { category: "svin", status: "drift" }
+          : { category: "storfe", status: "ukjent" };
+
         const items = parseCSV(text, defaults);
         setCustomItems(items);
         setLoadInfo(`Lastet ${items.length} rader fra ${file}`);
@@ -225,10 +223,7 @@ export default function NorgeKart() {
 
   const allItems = useMemo(() => {
     const base = isSvinView ? [] : TINE_SITES.map(x => ({ ...x }));
-    return [
-      ...base,
-      ...customItems.map(x => ({ ...x })),
-    ];
+    return [...base, ...customItems.map(x => ({ ...x }))];
   }, [customItems, isSvinView]);
 
   const resolved = useGeocode(allItems);
@@ -256,7 +251,10 @@ export default function NorgeKart() {
   }, [resolved]);
 
   const importCSV = () => {
-    const defaults = isSvinView ? { category: "svin", status: "drift" } : { category: "storfe", status: "ukjent" };
+    const defaults = isSvinView
+      ? { category: "svin", status: "drift" }
+      : { category: "storfe", status: "ukjent" };
+
     const items = parseCSV(csvText, defaults);
     setCustomItems(items);
     setLoadInfo(`Lastet ${items.length} rader fra tekstfelt`);
@@ -290,14 +288,13 @@ export default function NorgeKart() {
     <div className="w-full h-[750px] grid grid-cols-1 lg:grid-cols-3 gap-3">
       <div className="lg:col-span-1 rounded-2xl shadow-sm border bg-white p-3 overflow-auto">
         <div className="text-xl font-semibold">{title}</div>
+
         <div className="text-sm text-slate-600 mt-1">
           <a href="/" className="underline">Alle</a>,{" "}
           <a href="/?view=svin" className="underline">Svin</a>
         </div>
 
-        {loadInfo && (
-          <div className="mt-2 text-xs text-slate-700">{loadInfo}</div>
-        )}
+        {loadInfo && <div className="mt-2 text-xs text-slate-700">{loadInfo}</div>}
 
         <div className="mt-4">
           <div className="text-sm font-semibold mb-2">Søk</div>
@@ -355,9 +352,7 @@ export default function NorgeKart() {
               <button onClick={exportCSV} className="px-3 py-1 rounded-xl bg-slate-200 text-sm">Eksporter</button>
             </div>
           </div>
-          <div className="text-xs text-slate-600 mt-1">
-            Kolonner, orgnr,id,name,address,category,status,note, separator ; eller ,
-          </div>
+          <div className="text-xs text-slate-600 mt-1">Kolonner, orgnr,id,name,address,category,status,note, separator ; eller ,</div>
           <textarea
             value={csvText}
             onChange={e => setCsvText(e.target.value)}
