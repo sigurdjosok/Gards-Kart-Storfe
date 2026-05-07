@@ -16,17 +16,14 @@ function emojiIcon(emoji, bg) {
 }
 
 const ICONS = {
-  storfe: emojiIcon("🐄", "#bbf7d0"),
   svin: emojiIcon("🐖", "#fbcfe8"),
-  begge: emojiIcon("🐄🐖", "#e9d5ff"),
-  tine: emojiIcon("🥛", "#bfdbfe"),
 };
 
 function normalize(s) {
   return (s || "").toString().trim();
 }
 
-function parseCSV(text, defaults = { category: "storfe", status: "ukjent" }) {
+function parseCSV(text) {
   const lines = text
     .split(/\r?\n/)
     .map(l => l.trim())
@@ -37,40 +34,32 @@ function parseCSV(text, defaults = { category: "storfe", status: "ukjent" }) {
   const first = lines[0].replace(/^\uFEFF/, "");
   const sep = first.includes(";") ? ";" : ",";
 
-  const header = first.split(sep).map(h => h.trim().toLowerCase());
+  const header = first
+    .split(sep)
+    .map(h => h.trim().toLowerCase());
+
   const idx = (k) => header.indexOf(k);
 
-  const get = (cols, key, fallbackIndex = -1) => {
-    const i = idx(key);
-    if (i >= 0) return cols[i] || "";
-    if (fallbackIndex >= 0) return cols[fallbackIndex] || "";
-    return "";
-  };
-
   const out = [];
-
-  for (let r = 1; r < lines.length; r++) {
-    const cols = lines[r].split(sep).map(c => c.trim());
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(sep).map(c => c.trim());
 
     const name =
-      get(cols, "name", cols.length >= 2 ? 1 : 0) ||
-      get(cols, "egendefinert.navn") ||
+      (idx("name") >= 0 ? cols[idx("name")] : "") ||
+      (cols.length >= 2 ? cols[1] : "") ||
       "";
 
     const address =
-      get(cols, "address", cols.length >= 3 ? 2 : -1) ||
-      get(cols, "full_adresse") ||
+      (idx("address") >= 0 ? cols[idx("address")] : "") ||
+      (cols.length >= 3 ? cols[2] : "") ||
       "";
 
     if (!name || !address) continue;
 
-    const categoryRaw = (get(cols, "category") || defaults.category).toLowerCase();
-    const statusRaw = (get(cols, "status") || defaults.status).toLowerCase();
-
     out.push({
       name,
-      category: ICONS[categoryRaw] ? categoryRaw : defaults.category,
-      status: statusRaw === "drift" ? "drift" : "ukjent",
+      category: "svin",
+      status: "drift",
       address,
       lat: undefined,
       lon: undefined,
@@ -82,82 +71,142 @@ function parseCSV(text, defaults = { category: "storfe", status: "ukjent" }) {
 
 async function geocodeNominatim(address) {
   const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+  });
   if (!res.ok) return null;
   const json = await res.json();
-  if (!json.length) return null;
-
-  return {
-    lat: Number(json[0].lat),
-    lon: Number(json[0].lon),
-  };
+  if (!json?.length) return null;
+  return { lat: Number(json[0].lat), lon: Number(json[0].lon) };
 }
 
 function useGeocode(items) {
   const [resolved, setResolved] = useState(items);
+  const queueRef = useRef([]);
+  const busyRef = useRef(0);
 
   useEffect(() => {
     setResolved(items);
   }, [items]);
 
   useEffect(() => {
-    const run = async () => {
-      const updated = [...items];
+    const key = "farmmap_geocode_cache_v1";
+    const cache = JSON.parse(localStorage.getItem(key) || "{}");
 
-      for (let i = 0; i < updated.length; i++) {
-        if (updated[i].address && !updated[i].lat) {
-          const hit = await geocodeNominatim(updated[i].address);
-          if (hit) updated[i] = { ...updated[i], ...hit };
-        }
+    const need = items
+      .map((it, idx) => ({ it, idx }))
+      .filter(({ it }) => !(typeof it.lat === "number" && typeof it.lon === "number") && it.address);
+
+    queueRef.current = need;
+
+    const pump = async () => {
+      if (busyRef.current >= 2) return;
+      const next = queueRef.current.shift();
+      if (!next) return;
+
+      const { it, idx } = next;
+      const a = it.address;
+
+      if (cache[a]) {
+        const { lat, lon } = cache[a];
+        setResolved(prev => {
+          const copy = [...prev];
+          copy[idx] = { ...copy[idx], lat, lon };
+          return copy;
+        });
+        pump();
+        return;
       }
 
-      setResolved(updated);
+      busyRef.current++;
+      try {
+        const hit = await geocodeNominatim(a);
+        if (hit) {
+          cache[a] = hit;
+          localStorage.setItem(key, JSON.stringify(cache));
+          setResolved(prev => {
+            const copy = [...prev];
+            copy[idx] = { ...copy[idx], ...hit };
+            return copy;
+          });
+        }
+      } catch (e) {
+      } finally {
+        busyRef.current--;
+        setTimeout(pump, 250);
+      }
     };
 
-    run();
+    pump();
+    pump();
   }, [items]);
 
   return resolved;
 }
 
-export default function NorgeKart() {
-  const isSvin = window.location.search.includes("view=svin");
-  const file = isSvin ? "svin.csv" : "datasett.csv";
+export default function NorgeKartSvin() {
+  const [search, setSearch] = useState("");
+  const [customItems, setCustomItems] = useState([]);
+  const [loadInfo, setLoadInfo] = useState("");
 
-  const [data, setData] = useState([]);
-
+  // ✅ HER ER DET VIKTIGE BYTTET
   useEffect(() => {
-    fetch(`${window.location.origin}/${file}`)
-      .then(r => r.text())
-      .then(txt => {
-        const parsed = parseCSV(txt, isSvin ? { category: "svin", status: "drift" } : {});
-        setData(parsed);
+    const url = `${window.location.origin}/svin.csv?v=${Date.now()}`;
+    fetch(url)
+      .then(res => {
+        if (!res.ok) throw new Error("Kunne ikke hente svin.csv");
+        return res.text();
+      })
+      .then(text => {
+        const items = parseCSV(text);
+        setCustomItems(items);
+        setLoadInfo(`Lastet ${items.length} svinebønder`);
+      })
+      .catch(err => {
+        setLoadInfo(`Feil: ${err.message}`);
       });
-  }, [file]);
+  }, []);
 
-  const resolved = useGeocode(data);
-  const markers = resolved.filter(x => x.lat && x.lon);
+  const resolved = useGeocode(customItems);
+
+  const filtered = useMemo(() => {
+    const q = normalize(search).toLowerCase();
+    return resolved.filter(it => {
+      if (q && !(it.name.toLowerCase().includes(q) || it.address.toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [resolved, search]);
+
+  const markers = filtered.filter(it => typeof it.lat === "number" && typeof it.lon === "number");
 
   return (
-    <div>
-      <h2>{isSvin ? "🐖 Svinebønder" : "🗺️ Norgekart"}</h2>
+    <div className="w-full h-[750px] grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div className="lg:col-span-1 p-3">
+        <div className="text-xl font-semibold">🐖 Svinebønder</div>
+        <div className="text-sm mt-1">{loadInfo}</div>
 
-      <div>
-        <a href="/">Alle</a> | <a href="/?view=svin">Svin</a>
+        <input
+          className="w-full mt-3 border p-2"
+          placeholder="Søk..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
       </div>
 
-      <MapContainer center={NORWAY_CENTER} zoom={4} style={{ height: "600px" }}>
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <div className="lg:col-span-2">
+        <MapContainer center={NORWAY_CENTER} zoom={4} style={{ height: "750px", width: "100%" }}>
+          <TileLayer attribution="© OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-        {markers.map((m, i) => (
-          <Marker key={i} position={[m.lat, m.lon]} icon={ICONS[m.category] || ICONS.storfe}>
-            <Popup>
-              <b>{m.name}</b><br />
-              {m.address}
-            </Popup>
-          </Marker>
-        ))}
-      </MapContainer>
+          {markers.map((it, idx) => (
+            <Marker key={idx} position={[it.lat, it.lon]} icon={ICONS.svin}>
+              <Popup>
+                <b>{it.name}</b><br />
+                {it.address}
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
+      </div>
     </div>
   );
 }
