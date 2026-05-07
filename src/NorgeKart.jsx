@@ -54,7 +54,7 @@ function normalize(s) {
   return (s || "").toString().trim();
 }
 
-function parseCSV(text) {
+function parseCSV(text, defaults = { category: "storfe", status: "ukjent" }) {
   const lines = text
     .split(/\r?\n/)
     .map(l => l.trim())
@@ -65,46 +65,51 @@ function parseCSV(text) {
   const first = lines[0].replace(/^\uFEFF/, "");
   const sep = first.includes(";") ? ";" : ",";
 
-  const header = first
-    .split(sep)
-    .map(h => h.trim().toLowerCase());
-
+  const header = first.split(sep).map(h => h.trim().toLowerCase());
   const idx = (k) => header.indexOf(k);
 
+  const get = (cols, key, fallbackIndex = -1) => {
+    const i = idx(key);
+    if (i >= 0) return cols[i] ?? "";
+    if (fallbackIndex >= 0) return cols[fallbackIndex] ?? "";
+    return "";
+  };
+
   const out = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(sep).map(c => c.trim());
+  for (let r = 1; r < lines.length; r++) {
+    const cols = lines[r].split(sep).map(c => c.trim());
 
     const name =
-      (idx("name") >= 0 ? cols[idx("name")] : "") ||
-      (cols.length >= 2 ? cols[1] : "") ||
-      cols[0] ||
+      get(cols, "name", cols.length >= 2 ? 1 : 0) ||
+      get(cols, "egendefinert.navn") ||
       "";
 
     const address =
-      (idx("address") >= 0 ? cols[idx("address")] : "") ||
-      (cols.length >= 3 ? cols[2] : "") ||
+      get(cols, "address", cols.length >= 3 ? 2 : -1) ||
+      get(cols, "full_adresse") ||
       "";
-
-    const categoryRaw =
-      (idx("category") >= 0 ? cols[idx("category")] : "") || "";
-
-    const statusRaw =
-      (idx("status") >= 0 ? cols[idx("status")] : "") || "";
-
-    const category = (categoryRaw || "storfe").toLowerCase();
-    const status = (statusRaw || "ukjent").toLowerCase();
 
     if (!name || !address) continue;
 
+    const categoryRaw =
+      (get(cols, "category") || defaults.category || "storfe").toString().toLowerCase();
+
+    const statusRaw =
+      (get(cols, "status") || defaults.status || "ukjent").toString().toLowerCase();
+
+    const category = ICONS[categoryRaw] ? categoryRaw : defaults.category || "storfe";
+    const status = statusRaw === "drift" ? "drift" : "ukjent";
+
+    const note = get(cols, "note") || "";
+
     out.push({
       name,
-      category: ICONS[category] ? category : "storfe",
-      status: status === "drift" ? "drift" : "ukjent",
+      category,
+      status,
       address,
       lat: undefined,
       lon: undefined,
-      note: (idx("note") >= 0 ? cols[idx("note")] : "") || "",
+      note,
     });
   }
 
@@ -113,9 +118,7 @@ function parseCSV(text) {
 
 async function geocodeNominatim(address) {
   const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
-  const res = await fetch(url, {
-    headers: { Accept: "application/json" },
-  });
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) return null;
   const json = await res.json();
   if (!json?.length) return null;
@@ -142,7 +145,7 @@ function useGeocode(items) {
     queueRef.current = need;
 
     const pump = async () => {
-      if (busyRef.current >= 2) return; // holdes lavt for stabilitet
+      if (busyRef.current >= 2) return;
       const next = queueRef.current.shift();
       if (!next) return;
 
@@ -173,7 +176,6 @@ function useGeocode(items) {
           });
         }
       } catch (e) {
-        // ignorer
       } finally {
         busyRef.current--;
         setTimeout(pump, 250);
@@ -188,41 +190,46 @@ function useGeocode(items) {
 }
 
 export default function NorgeKart() {
+  const params = useMemo(() => new URLSearchParams(window.location.search), []);
+  const isSvinView = params.get("view") === "svin";
+  const file = isSvinView ? "svin.csv" : "datasett.csv";
+
   const [showCategories, setShowCategories] = useState({ storfe: true, svin: true, begge: true, tine: true });
   const [showStatus, setShowStatus] = useState({ drift: true, ukjent: true });
   const [search, setSearch] = useState("");
 
   const [csvText, setCsvText] = useState(
-    "name,category,status,address,lat,lon,note\nEksempel gård,storfe,drift,,63.43,10.39,Trondheim"
+    "orgnr,name,address\n812870572,JÆRGRIS AS,\"Teglevegen 123, 4355 KVERNALAND\""
   );
 
   const [customItems, setCustomItems] = useState([]);
   const [loadInfo, setLoadInfo] = useState("");
 
-  // Auto load fra public/datasett.csv
   useEffect(() => {
-    const url = `${window.location.origin}/datasett.csv?v=${Date.now()}`;
+    const url = `${window.location.origin}/${file}?v=${Date.now()}`;
     fetch(url)
       .then(res => {
-        if (!res.ok) throw new Error(`Kunne ikke hente datasett.csv, status ${res.status}`);
+        if (!res.ok) throw new Error(`Kunne ikke hente ${file}, status ${res.status}`);
         return res.text();
       })
       .then(text => {
-        const items = parseCSV(text);
+        const defaults = isSvinView ? { category: "svin", status: "drift" } : { category: "storfe", status: "ukjent" };
+        const items = parseCSV(text, defaults);
         setCustomItems(items);
-        setLoadInfo(`Lastet ${items.length} rader fra datasett.csv`);
+        setLoadInfo(`Lastet ${items.length} rader fra ${file}`);
       })
       .catch(err => {
-        setLoadInfo(`Feil ved lasting av datasett.csv, ${err.message}`);
+        setLoadInfo(`Feil ved lasting av ${file}, ${err.message}`);
       });
-  }, []);
+  }, [file, isSvinView]);
 
   const allItems = useMemo(() => {
+    const base = isSvinView ? [] : TINE_SITES.map(x => ({ ...x }));
     return [
-      ...TINE_SITES.map(x => ({ ...x })),
+      ...base,
       ...customItems.map(x => ({ ...x })),
     ];
-  }, [customItems]);
+  }, [customItems, isSvinView]);
 
   const resolved = useGeocode(allItems);
 
@@ -249,7 +256,8 @@ export default function NorgeKart() {
   }, [resolved]);
 
   const importCSV = () => {
-    const items = parseCSV(csvText);
+    const defaults = isSvinView ? { category: "svin", status: "drift" } : { category: "storfe", status: "ukjent" };
+    const items = parseCSV(csvText, defaults);
     setCustomItems(items);
     setLoadInfo(`Lastet ${items.length} rader fra tekstfelt`);
   };
@@ -271,16 +279,21 @@ export default function NorgeKart() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "kartdata.csv";
+    a.download = isSvinView ? "kartdata_svin.csv" : "kartdata.csv";
     a.click();
     URL.revokeObjectURL(url);
   };
 
+  const title = isSvinView ? "🐖 Svinebønder" : "Norgekart, storfe, svin, TINE";
+
   return (
     <div className="w-full h-[750px] grid grid-cols-1 lg:grid-cols-3 gap-3">
       <div className="lg:col-span-1 rounded-2xl shadow-sm border bg-white p-3 overflow-auto">
-        <div className="text-xl font-semibold">Norgekart, storfe, svin, TINE</div>
-        <div className="text-sm text-slate-600 mt-1">Filtrer lag, søk, lim inn CSV, TINE punkter geokodes fra adresse</div>
+        <div className="text-xl font-semibold">{title}</div>
+        <div className="text-sm text-slate-600 mt-1">
+          <a href="/" className="underline">Alle</a>,{" "}
+          <a href="/?view=svin" className="underline">Svin</a>
+        </div>
 
         {loadInfo && (
           <div className="mt-2 text-xs text-slate-700">{loadInfo}</div>
@@ -288,7 +301,12 @@ export default function NorgeKart() {
 
         <div className="mt-4">
           <div className="text-sm font-semibold mb-2">Søk</div>
-          <input value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-xl border px-3 py-2" placeholder="Søk navn eller adresse" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full rounded-xl border px-3 py-2"
+            placeholder="Søk navn eller adresse"
+          />
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3">
@@ -301,11 +319,16 @@ export default function NorgeKart() {
               { k: "tine", label: `🥛 TINE anlegg (${counts.tine})` },
             ].map(x => (
               <label key={x.k} className="flex items-center gap-2 text-sm mb-1">
-                <input type="checkbox" checked={showCategories[x.k]} onChange={e => setShowCategories(s => ({ ...s, [x.k]: e.target.checked }))} />
+                <input
+                  type="checkbox"
+                  checked={showCategories[x.k]}
+                  onChange={e => setShowCategories(s => ({ ...s, [x.k]: e.target.checked }))}
+                />
                 <span>{x.label}</span>
               </label>
             ))}
           </div>
+
           <div>
             <div className="text-sm font-semibold mb-2">Status</div>
             {[
@@ -313,7 +336,11 @@ export default function NorgeKart() {
               { k: "ukjent", label: `Ukjent (${counts.ukjent})` },
             ].map(x => (
               <label key={x.k} className="flex items-center gap-2 text-sm mb-1">
-                <input type="checkbox" checked={showStatus[x.k]} onChange={e => setShowStatus(s => ({ ...s, [x.k]: e.target.checked }))} />
+                <input
+                  type="checkbox"
+                  checked={showStatus[x.k]}
+                  onChange={e => setShowStatus(s => ({ ...s, [x.k]: e.target.checked }))}
+                />
                 <span>{x.label}</span>
               </label>
             ))}
@@ -328,8 +355,14 @@ export default function NorgeKart() {
               <button onClick={exportCSV} className="px-3 py-1 rounded-xl bg-slate-200 text-sm">Eksporter</button>
             </div>
           </div>
-          <div className="text-xs text-slate-600 mt-1">Kolonner, id,name,address eller name,address, også mulig name,category,status,address</div>
-          <textarea value={csvText} onChange={e => setCsvText(e.target.value)} className="w-full h-36 mt-2 rounded-xl border p-2 font-mono text-xs" />
+          <div className="text-xs text-slate-600 mt-1">
+            Kolonner, orgnr,id,name,address,category,status,note, separator ; eller ,
+          </div>
+          <textarea
+            value={csvText}
+            onChange={e => setCsvText(e.target.value)}
+            className="w-full h-36 mt-2 rounded-xl border p-2 font-mono text-xs"
+          />
         </div>
 
         <div className="mt-4">
@@ -345,12 +378,22 @@ export default function NorgeKart() {
         <MapContainer center={NORWAY_CENTER} zoom={4} style={{ height: "750px", width: "100%" }}>
           <TileLayer attribution="© OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           {markers.map((it, idx) => (
-            <Marker key={`${it.name}-${idx}`} position={[it.lat, it.lon]} icon={ICONS[it.category] || ICONS.storfe}>
+            <Marker
+              key={`${it.name}-${idx}`}
+              position={[it.lat, it.lon]}
+              icon={ICONS[it.category] || ICONS.storfe}
+            >
               <Popup>
                 <div className="text-sm">
                   <div className="font-semibold">{it.name}</div>
                   <div className="mt-1">
-                    {it.category === "tine" ? "🥛 TINE" : it.category === "begge" ? "🐄🐖 Storfe og svin" : it.category === "svin" ? "🐖 Svin" : "🐄 Storfe"}
+                    {it.category === "tine"
+                      ? "🥛 TINE"
+                      : it.category === "begge"
+                        ? "🐄🐖 Storfe og svin"
+                        : it.category === "svin"
+                          ? "🐖 Svin"
+                          : "🐄 Storfe"}
                   </div>
                   <div className="mt-1">Status, {it.status === "drift" ? "i drift" : "ukjent"}</div>
                   {it.address && <div className="mt-1">Adresse, {it.address}</div>}
