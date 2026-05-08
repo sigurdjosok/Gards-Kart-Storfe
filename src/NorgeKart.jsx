@@ -16,7 +16,7 @@ function emojiIcon(emoji, bg) {
 }
 
 const ICONS = {
-  svin: emojiIcon("🐖", "#fbcfe8"),
+  storfe: emojiIcon("🐂", "#fbcfe8"),
   tine: emojiIcon("🏭", "#bfdbfe"),
 };
 
@@ -56,7 +56,7 @@ function parseCSV(text) {
 
     out.push({
       name,
-      category: "svin",
+      category: "storfe",
       status: "drift",
       address,
       lat: undefined,
@@ -188,18 +188,18 @@ export default function NorgeKartSvin() {
   const [loadInfo, setLoadInfo] = useState("");
 
   useEffect(() => {
-    const url = `${window.location.origin}/svin.csv?v=${Date.now()}`;
+    const url = `${window.location.origin}/storfe.csv?v=${Date.now()}`;
     fetch(url)
       .then((res) => {
-        if (!res.ok) throw new Error("Kunne ikke hente svin.csv");
+        if (!res.ok) throw new Error("Kunne ikke hente storfe.csv");
         return res.text();
       })
       .then((text) => {
-        const svinItems = parseCSV(text);
-        const all = [...TINE_ANLEGG, ...svinItems];
+        const storfeItems = parseCSV(text);
+        const all = [...TINE_ANLEGG, ...storfeItems];
         setCustomItems(all);
         setLoadInfo(
-          `Lastet ${svinItems.length} svinebønder, ${TINE_ANLEGG.length} TINE anlegg`
+          `Lastet ${storfeItems.length} storfebønder, ${TINE_ANLEGG.length} TINE anlegg`
         );
       })
       .catch((err) => {
@@ -229,7 +229,7 @@ export default function NorgeKartSvin() {
   return (
     <div className="w-full h-[750px] grid grid-cols-1 lg:grid-cols-3 gap-3">
       <div className="lg:col-span-1 p-3">
-        <div className="text-xl font-semibold">🐖 Svinebønder, 🏭 TINE anlegg</div>
+        <div className="text-xl font-semibold">🐂 Storfebønder, 🏭 TINE anlegg</div>
         <div className="text-sm mt-1">{loadInfo}</div>
 
         <input
@@ -255,7 +255,7 @@ export default function NorgeKartSvin() {
             <Marker
               key={`${it.category}:${it.name}:${it.address}`}
               position={[it.lat, it.lon]}
-              icon={ICONS[it.category] || ICONS.svin}
+              icon={ICONS[it.category] || ICONS.storfe}
             >
               <Popup>
                 <b>{it.name}</b>
@@ -263,7 +263,7 @@ export default function NorgeKartSvin() {
                 {it.address}
                 <br />
                 <span style={{ opacity: 0.75 }}>
-                  {it.category === "tine" ? "TINE anlegg" : "Svinebonde"}
+                  {it.category === "tine" ? "TINE anlegg" : "Storfebonde"}
                 </span>
               </Popup>
             </Marker>
