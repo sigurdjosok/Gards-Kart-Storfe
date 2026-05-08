@@ -16,7 +16,7 @@ function emojiIcon(emoji, bg) {
 }
 
 const ICONS = {
-  svin: emojiIcon("🐖", "#fbcfe8"),
+  storfe: emojiIcon("🐂", "#fbcfe8"),
 };
 
 function normalize(s) {
@@ -58,7 +58,7 @@ function parseCSV(text) {
 
     out.push({
       name,
-      category: "svin",
+      category: "storfe",
       status: "drift",
       address,
       lat: undefined,
@@ -144,23 +144,23 @@ function useGeocode(items) {
   return resolved;
 }
 
-export default function NorgeKartSvin() {
+export default function NorgeKartStorfe() {
   const [search, setSearch] = useState("");
   const [customItems, setCustomItems] = useState([]);
   const [loadInfo, setLoadInfo] = useState("");
 
   // ✅ HER ER DET VIKTIGE BYTTET
   useEffect(() => {
-    const url = `${window.location.origin}/svin.csv?v=${Date.now()}`;
+    const url = `${window.location.origin}/storfe.csv?v=${Date.now()}`;
     fetch(url)
       .then(res => {
-        if (!res.ok) throw new Error("Kunne ikke hente svin.csv");
+        if (!res.ok) throw new Error("Kunne ikke hente storfe.csv");
         return res.text();
       })
       .then(text => {
         const items = parseCSV(text);
         setCustomItems(items);
-        setLoadInfo(`Lastet ${items.length} svinebønder`);
+        setLoadInfo(`Lastet ${items.length} storfebønder`);
       })
       .catch(err => {
         setLoadInfo(`Feil: ${err.message}`);
@@ -182,7 +182,7 @@ export default function NorgeKartSvin() {
   return (
     <div className="w-full h-[750px] grid grid-cols-1 lg:grid-cols-3 gap-3">
       <div className="lg:col-span-1 p-3">
-        <div className="text-xl font-semibold">🐖 Svinebønder</div>
+        <div className="text-xl font-semibold">🐖 Storfebønder</div>
         <div className="text-sm mt-1">{loadInfo}</div>
 
         <input
@@ -198,7 +198,7 @@ export default function NorgeKartSvin() {
           <TileLayer attribution="© OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
           {markers.map((it, idx) => (
-            <Marker key={idx} position={[it.lat, it.lon]} icon={ICONS.svin}>
+            <Marker key={idx} position={[it.lat, it.lon]} icon={ICONS.storfe}>
               <Popup>
                 <b>{it.name}</b><br />
                 {it.address}
